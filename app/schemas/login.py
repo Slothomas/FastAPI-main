@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field
 
-
 class LoginRequest(BaseModel):
     """
     Schema para la petición de login.
