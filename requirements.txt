@@ -5,3 +5,6 @@ pyodbc
 python-dotenv
 bcrypt
 pydantic[email]
+azure-storage-blob
+python-multipart
+sendgrid
