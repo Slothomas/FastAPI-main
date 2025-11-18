@@ -18,3 +18,4 @@ class LoginResponse(BaseModel):
     user_id: int
     email: str
     user: str
+    role: str | None = None
