@@ -34,5 +34,6 @@ def login(credentials: LoginRequest, session: Session = Depends(get_session)):
         message="Login exitoso",
         user_id=user.id,
         email=user.email,
-        user=user.user
+        user=user.user,
+        role=user.clave
     )
