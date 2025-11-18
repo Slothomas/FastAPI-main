@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 from sqlmodel import SQLModel, Field, Column
-from sqlalchemy import NVARCHAR, VARCHAR, DateTime, SmallInteger, TEXT
+from sqlalchemy import NVARCHAR, VARCHAR, DateTime, SmallInteger
 
 class AppUser(SQLModel, table=True):
     """
@@ -20,14 +20,6 @@ class AppUser(SQLModel, table=True):
     question1_answ: Optional[str] = Field(default=None, sa_column=Column(NVARCHAR(255), nullable=True))
     question2_id: Optional[int] = Field(default=None, sa_column=Column(SmallInteger, nullable=True))
     question2_answ: Optional[str] = Field(default=None, sa_column=Column(NVARCHAR(255), nullable=True))
-
-    # Datos del CV (curriculum vitae)
-    cv_full_name: Optional[str] = Field(default=None, sa_column=Column(NVARCHAR(200), nullable=True))
-    cv_phone: Optional[str] = Field(default=None, sa_column=Column(NVARCHAR(50), nullable=True))
-    cv_summary: Optional[str] = Field(default=None, sa_column=Column(TEXT, nullable=True))
-    cv_experience: Optional[str] = Field(default=None, sa_column=Column(TEXT, nullable=True))  # JSON string
-    cv_education: Optional[str] = Field(default=None, sa_column=Column(TEXT, nullable=True))  # JSON string
-    cv_skills: Optional[str] = Field(default=None, sa_column=Column(NVARCHAR(500), nullable=True))
 
     is_active: int = Field(default=1, nullable=False)
     created_at: datetime = Field(default_factory=datetime.now, sa_column=Column(DateTime, nullable=False))

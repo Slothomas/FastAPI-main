@@ -7,7 +7,7 @@ from app.services.db import login_service
 router = APIRouter(prefix="/login", tags=["Authentication"])
 
 
-@router.post("/", response_model=LoginResponse)
+@router.post("", response_model=LoginResponse)
 def login(credentials: LoginRequest, session: Session = Depends(get_session)):
     """
     Autenticar un usuario con nombre de usuario/email y contraseña.

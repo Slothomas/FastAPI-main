@@ -1,37 +1,51 @@
+# app/main.py
 from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+
+# Importar routers
 from app.controllers.hello_controller import router as hello_router
 from app.controllers.db_controller import router as db_router
 from app.controllers.user_controller import router as user_router
 from app.controllers.login_controller import router as login_router
-from app.controllers.job_offer_controller import router as job_offer_router
-from app.controllers.job_application_controller import router as job_application_router
+from app.controllers.profile_controller import router as profile_router
+from app.controllers.certificate_controller import router as certificate_router
+from app.controllers.certificate_controller import router_download as certificate_download_router
+from app.controllers.support_controller import router as support_router
 from app.controllers.cv_controller import router as cv_router
-from app.controllers.admin_controller import router as admin_router
+from app.controllers.job_application_controller import router as job_application_router
+from app.controllers.job_offer_controller import router as job_offer_router
 
+
+
+# Crear la aplicación FastAPI
 app = FastAPI(title="BaristaApp API")
 
-# Configuración de CORS - Abierto para proyecto universitario
+# CORS (frontend SWA + local dev)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Permite peticiones desde cualquier origen
-    allow_credentials=True,
-    allow_methods=["*"],  # Permite todos los métodos (GET, POST, PUT, DELETE, etc.)
-    allow_headers=["*"],  # Permite todos los headers
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# Registro de routers
+# Routers
 app.include_router(hello_router)
 app.include_router(db_router)
 app.include_router(user_router)
 app.include_router(login_router)
-app.include_router(job_offer_router)
-app.include_router(job_application_router)
+app.include_router(profile_router)
+app.include_router(certificate_router)
+app.include_router(certificate_download_router)
+app.include_router(support_router)
 app.include_router(cv_router)
-app.include_router(admin_router)
+app.include_router(job_application_router)
+app.include_router(job_offer_router)
 
-# Endpoint de salud en la raíz
+
+# Endpoint de health y rutas disponibles
 @app.get("/")
 def health():
     return {
@@ -47,8 +61,10 @@ def health():
             {"ruta": "/db/test-connection", "método": "GET", "descripción": "Probar conexión a la base de datos"},
             {"ruta": "/users", "método": "GET/POST/PUT/DELETE", "descripción": "CRUD de usuarios"},
             {"ruta": "/login", "método": "POST", "descripción": "Autenticación de usuarios"},
-            {"ruta": "/job-offers", "método": "GET/POST/PUT/DELETE", "descripción": "CRUD de ofertas de trabajo"},
-            {"ruta": "/job-applications", "método": "GET/POST/PUT/DELETE", "descripción": "Gestión de postulaciones"},
-            {"ruta": "/cv", "método": "GET/PUT", "descripción": "Gestión de CV de usuarios"}
-        ]
+        ],
     }
+
+# Endpoint principal de la aplicación
+@app.get("/miapp")
+def miapp():
+    return {"message": "hola mundo"}

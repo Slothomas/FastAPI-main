@@ -8,12 +8,20 @@ from app.services.db import user_service
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
-@router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+from typing import List
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlmodel import Session
+from app.schemas.user import UserCreate, UserUpdate, UserResponse
+from app.services.db.sql_server_connection import get_session
+from app.services.db import user_service
+
+router = APIRouter(prefix="/users", tags=["Users"])
+
+@router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def create_user(user_data: UserCreate, session: Session = Depends(get_session)):
     """
     Crear un nuevo usuario.
     """
-    # Verificar si el email ya existe
     existing_user = user_service.get_user_by_email(user_data.email, session)
     if existing_user:
         raise HTTPException(
@@ -21,8 +29,8 @@ def create_user(user_data: UserCreate, session: Session = Depends(get_session)):
             detail="El email ya está registrado"
         )
 
-    # Crear el usuario
     return user_service.create_new_user(user_data, session)
+
 
 
 @router.get("/", response_model=List[UserResponse])
