@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlmodel import Session
 from typing import List
+
 from app.services.db.sql_server_connection import get_session
 from app.services.db.job_application_service import JobApplicationService
 from app.schemas.job_application import (
@@ -17,6 +18,7 @@ from app.schemas.job_application_bulk import (
 )
 
 router = APIRouter(prefix="/job-applications", tags=["Job Applications"])
+
 
 @router.post("/", response_model=JobApplicationResponse, status_code=status.HTTP_201_CREATED)
 def create_job_application(
@@ -49,6 +51,7 @@ def create_job_application(
             detail=f"Error al crear postulación: {str(e)}"
         )
 
+
 @router.get("/user/{user_id}", response_model=List[JobApplicationWithOffer])
 def get_my_applications(
     user_id: int,
@@ -61,7 +64,7 @@ def get_my_applications(
 
     Devuelve cada postulación con:
     - ID de la postulación
-    - Estado (pending, reviewed, accepted, rejected)
+    - Estado (pending, under_review, interview_scheduled, interviewed, offered, hired, rejected)
     - Carta de presentación
     - Título de la oferta de trabajo
     - Empresa
@@ -80,6 +83,7 @@ def get_my_applications(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al obtener postulaciones: {str(e)}"
         )
+
 
 @router.get("/job-offer/{job_offer_id}", response_model=List[JobApplicationResponse])
 def get_applications_for_job_offer(
@@ -102,6 +106,7 @@ def get_applications_for_job_offer(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al obtener postulaciones: {str(e)}"
         )
+
 
 @router.get("/{application_id}", response_model=JobApplicationResponse)
 def get_application(
@@ -126,6 +131,7 @@ def get_application(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al obtener postulación: {str(e)}"
         )
+
 
 @router.get("/{application_id}/with-user", response_model=JobApplicationWithUser)
 def get_application_with_user(
@@ -152,6 +158,7 @@ def get_application_with_user(
             detail=f"Error al obtener postulación: {str(e)}"
         )
 
+
 @router.get("/{application_id}/with-offer", response_model=JobApplicationWithOffer)
 def get_application_with_offer(
     application_id: int,
@@ -177,6 +184,7 @@ def get_application_with_offer(
             detail=f"Error al obtener postulación: {str(e)}"
         )
 
+
 @router.put("/{application_id}/status", response_model=JobApplicationResponse)
 def update_application_status(
     application_id: int,
@@ -187,18 +195,10 @@ def update_application_status(
     Actualizar el estado de una postulación.
     Solo debe ser usado por reclutadores.
 
-    - **status**: pending, reviewed, accepted, rejected
-    - **recruiter_notes**: Notas opcionales del reclutador
+    El campo **status** ahora es validado por Enum (ApplicationStatus) en el schema,
+    por lo que no se valida manualmente aquí.
     """
     try:
-        # Validar que el status sea válido
-        valid_statuses = ["pending", "reviewed", "accepted", "rejected"]
-        if status_data.status not in valid_statuses:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Estado inválido. Debe ser uno de: {', '.join(valid_statuses)}"
-            )
-
         updated_application = JobApplicationService.update_application_status(
             session, application_id, status_data
         )
@@ -215,6 +215,7 @@ def update_application_status(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al actualizar estado: {str(e)}"
         )
+
 
 @router.delete("/{application_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_application(
@@ -241,6 +242,7 @@ def delete_application(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al eliminar postulación: {str(e)}"
         )
+
 
 # ========== ENDPOINTS PARA ACTUALIZACIÓN EN LOTE ==========
 
@@ -282,6 +284,7 @@ def bulk_update_application_status(
             detail=f"Error al actualizar postulaciones en lote: {str(e)}"
         )
 
+
 @router.put("/bulk/job-offer/{job_offer_id}", response_model=BulkUpdateResponse)
 def bulk_update_by_job_offer(
     job_offer_id: int,
@@ -298,7 +301,7 @@ def bulk_update_by_job_offer(
     ```json
     {
       "job_offer_id": 10,
-      "exclude_ids": [15, 20],  // Candidatos seleccionados
+      "exclude_ids": [15, 20],
       "status": "rejected",
       "recruiter_notes": "Posición cubierta, gracias por postular"
     }
@@ -308,7 +311,7 @@ def bulk_update_by_job_offer(
     ```json
     {
       "job_offer_id": 10,
-      "exclude_ids": [15, 20, 25],  // Ya están en entrevista
+      "exclude_ids": [15, 20, 25],
       "status": "pending",
       "recruiter_notes": "En lista de espera"
     }
@@ -341,4 +344,30 @@ def bulk_update_by_job_offer(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al actualizar postulaciones: {str(e)}"
+        )
+
+
+@router.put("/{application_id}/refresh-matching", response_model=JobApplicationResponse)
+def refresh_application_matching(
+    application_id: int,
+    session: Session = Depends(get_session)
+):
+    """
+    Recalcula el matching_score de la postulación.
+    """
+    try:
+        app_updated = JobApplicationService.refresh_matching_score(session, application_id)
+        if not app_updated:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Postulación no encontrada"
+            )
+        return JobApplicationResponse.from_model(app_updated)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error refrescando matching: {str(e)}"
         )

@@ -16,6 +16,14 @@ from app.controllers.support_controller import router as support_router
 from app.controllers.cv_controller import router as cv_router
 from app.controllers.job_application_controller import router as job_application_router
 from app.controllers.job_offer_controller import router as job_offer_router
+from app.controllers.review_controller import router as review_router
+from app.controllers.favorites_controller import router as favorite_router
+from app.controllers.notification_controller import router as notification_router
+from app.controllers.event_log_controller import router as event_log_router
+from app.controllers.assignment_controller import router as assignment_router
+
+
+
 
 
 
@@ -43,6 +51,11 @@ app.include_router(support_router)
 app.include_router(cv_router)
 app.include_router(job_application_router)
 app.include_router(job_offer_router)
+app.include_router(review_router)
+app.include_router(favorite_router)
+app.include_router(notification_router)
+app.include_router(event_log_router)
+app.include_router(assignment_router)
 
 
 # Endpoint de health y rutas disponibles

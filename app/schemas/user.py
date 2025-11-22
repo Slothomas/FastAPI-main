@@ -7,7 +7,7 @@ class UserCreate(BaseModel):
     user: str = Field(..., min_length=1, max_length=50, description="Nombre de usuario")
     email: EmailStr = Field(..., description="Email del usuario")
     password: str = Field(..., min_length=6, max_length=72, description="Contraseña del usuario (máx 72 caracteres por límite de bcrypt)")
-    clave: Optional[str] = Field(None, max_length=512, description="Clave adicional")
+    user_type: Optional[str] = Field(None, max_length=512, description="Clave adicional")
     question1_id: Optional[int] = Field(None, ge=0, le=255, description="ID de pregunta de seguridad 1")
     question1_answ: Optional[str] = Field(None, max_length=255, description="Respuesta a pregunta 1")
     question2_id: Optional[int] = Field(None, ge=0, le=255, description="ID de pregunta de seguridad 2")
@@ -19,7 +19,7 @@ class UserUpdate(BaseModel):
     user: Optional[str] = Field(None, min_length=1, max_length=50)
     email: Optional[EmailStr] = None
     password: Optional[str] = Field(None, min_length=6, max_length=72)
-    clave: Optional[str] = Field(None, max_length=512)
+    user_type: Optional[str] = Field(None, max_length=512)
     question1_id: Optional[int] = Field(None, ge=0, le=255)
     question1_answ: Optional[str] = Field(None, max_length=255)
     question2_id: Optional[int] = Field(None, ge=0, le=255)
@@ -31,7 +31,7 @@ class UserResponse(BaseModel):
     id: int
     user: str
     email: str
-    clave: Optional[str] = None
+    user_type: Optional[str] = None
     question1_id: Optional[int] = None
     question1_answ: Optional[str] = None
     question2_id: Optional[int] = None
