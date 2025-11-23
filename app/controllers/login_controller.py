@@ -35,5 +35,5 @@ def login(credentials: LoginRequest, session: Session = Depends(get_session)):
         user_id=user.id,
         email=user.email,
         user=user.user,
-        role=user.clave  
+        role=user.user_type  
     )
