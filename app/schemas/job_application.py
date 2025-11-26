@@ -1,3 +1,4 @@
+# app/schemas/job_application.py
 from datetime import datetime
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field
@@ -11,8 +12,12 @@ class JobApplicationCreate(BaseModel):
 
 
 class JobApplicationUpdateStatus(BaseModel):
-    status: ApplicationStatus = Field(..., description="Estado de la postulación")
+    status: str = Field(..., description="Estado de la postulación (lowercase)")
     recruiter_notes: Optional[str] = Field(None, description="Notas del reclutador")
+
+    # rechazo
+    rejection_reason: Optional[str] = None
+    rejection_note: Optional[str] = None
 
 
 class JobApplicationResponse(BaseModel):
@@ -23,13 +28,23 @@ class JobApplicationResponse(BaseModel):
     status: ApplicationStatus
     recruiter_notes: Optional[str]
 
-    # ===== NUEVO =====
     match_score: Optional[float] = None
     match_breakdown: Optional[Dict[str, Any]] = None
     match_refreshed_at: Optional[datetime] = None
 
     applied_at: datetime
     updated_at: datetime
+
+    rejection_reason: Optional[str] = None
+    rejection_note: Optional[str] = None
+    rejected_at: Optional[datetime] = None
+
+    # ============================
+    # NUEVOS CAMPOS PARA RESEÑAS
+    # (deben existir en el modelo/tabla job_application)
+    # ============================
+    worker_reviewed: bool = False
+    employer_reviewed: bool = False
 
     class Config:
         from_attributes = True
@@ -38,10 +53,10 @@ class JobApplicationResponse(BaseModel):
     @classmethod
     def from_model(cls, app):
         breakdown = None
-        if app.match_breakdown_json:
+        if getattr(app, "match_breakdown_json", None):
             try:
                 breakdown = json.loads(app.match_breakdown_json)
-            except:
+            except Exception:
                 breakdown = None
 
         return cls(
@@ -56,6 +71,13 @@ class JobApplicationResponse(BaseModel):
             match_refreshed_at=app.match_refreshed_at,
             applied_at=app.applied_at,
             updated_at=app.updated_at,
+
+            rejection_reason=app.rejection_reason,
+            rejection_note=app.rejection_note,
+            rejected_at=app.rejected_at,
+
+            worker_reviewed=bool(getattr(app, "worker_reviewed", False)),
+            employer_reviewed=bool(getattr(app, "employer_reviewed", False)),
         )
 
 

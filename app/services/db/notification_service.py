@@ -13,11 +13,15 @@ class NotificationService:
         session: Session,
         user_id: int,
         type: str,
-        payload: Optional[Dict[str, Any]] = None
+        payload: Optional[Dict[str, Any]] = None,
+        title: Optional[str] = None,   # <--- NUEVO
+        message: Optional[str] = None  # <--- NUEVO
     ) -> Notification:
         notif = Notification(
             user_id=user_id,
             type=type,
+            title=title,      # Asignamos title
+            message=message,  # Asignamos message
             payload=json.dumps(payload) if payload else None,
             is_read=False,
             created_at=datetime.utcnow(),
@@ -39,12 +43,20 @@ class NotificationService:
             q = q.where(Notification.is_read == False)
 
         q = q.order_by(Notification.created_at.desc())
-        return list(session.exec(q).all())
+        return session.exec(q).all()
 
     @staticmethod
-    def mark_as_read(session: Session, notification_id: int, user_id: int) -> Optional[Notification]:
+    def mark_as_read(session: Session, notification_id: int, user_id: Optional[int] = None) -> Optional[Notification]:
+        """
+        Marca como leída.
+        user_id es Opcional: Si viene None, saltamos la validación de dueño (útil para llamadas simples del frontend).
+        """
         notif = session.get(Notification, notification_id)
-        if not notif or notif.user_id != user_id:
+        if not notif:
+            return None
+            
+        # Solo validamos dueño si se proporciona el user_id
+        if user_id is not None and notif.user_id != user_id:
             return None
 
         notif.is_read = True
@@ -54,9 +66,17 @@ class NotificationService:
         return notif
 
     @staticmethod
-    def delete_notification(session: Session, notification_id: int, user_id: int) -> bool:
+    def delete_notification(session: Session, notification_id: int, user_id: Optional[int] = None) -> bool:
+        """
+        Borrado lógico (soft delete).
+        user_id es Opcional.
+        """
         notif = session.get(Notification, notification_id)
-        if not notif or notif.user_id != user_id:
+        if not notif:
+            return False
+            
+        # Solo validamos dueño si se proporciona el user_id
+        if user_id is not None and notif.user_id != user_id:
             return False
 
         notif.is_active = False

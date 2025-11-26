@@ -1,14 +1,27 @@
+# app/services/db/job_application_service.py
+
 from datetime import datetime
 from typing import List, Optional
 import json
-
 from sqlmodel import Session, select
+from fastapi import HTTPException
 
-from app.models.job_application import JobApplication, ApplicationStatus
-from app.models.job_offer import JobOffer
-from app.models.user import AppUser
-from app.schemas.job_application import JobApplicationCreate, JobApplicationUpdateStatus
+# schemas (solo DTOs)
+from app.schemas.job_application import (
+    JobApplicationCreate,
+    JobApplicationUpdateStatus
+)
+
+# models (entidades reales)
+from app.models.job_application import (
+    JobApplication,
+    ApplicationStatus,
+    RejectionReason
+)
+
+from app.models.job_offer import JobOffer, JobOfferStatus
 from app.services.db.matching_service import MatchingService
+from app.models.user import AppUser
 
 
 class JobApplicationService:
@@ -160,20 +173,73 @@ class JobApplicationService:
         application_id: int,
         status_data: JobApplicationUpdateStatus
     ) -> Optional[JobApplication]:
-        """Actualizar el estado de una postulación (solo reclutador)"""
+        """Actualizar el estado de una postulación
+        + libera vacante si hired -> rejected
+        + guarda motivo/nota si rejected
+        """
 
         application = session.get(JobApplication, application_id)
         if not application:
             return None
 
-        application.status = status_data.status
+        # Normalizar a string lower seguro
+        old_status = str(application.status.value if hasattr(application.status, "value") else application.status or "").strip().lower()
+        new_status = str(status_data.status or "").strip().lower()
+
+        # Validar que el nuevo estado exista en el Enum
+        valid_statuses = {s.value for s in ApplicationStatus}
+        if new_status not in valid_statuses:
+            raise HTTPException(status_code=400, detail="status inválido")
+
+        # Castear a enum
+        application.status = ApplicationStatus(new_status)
 
         if status_data.recruiter_notes is not None:
             application.recruiter_notes = status_data.recruiter_notes
 
-        application.updated_at = datetime.now()
+        # ===== NUEVO: lógica rechazo =====
+        if new_status == "rejected":
+            if not status_data.rejection_reason:
+                raise HTTPException(status_code=400, detail="rejection_reason es obligatorio al rechazar")
 
+            valid_reasons = {r.value for r in RejectionReason}
+            if status_data.rejection_reason not in valid_reasons:
+                raise HTTPException(status_code=400, detail="rejection_reason inválido")
+
+            application.rejection_reason = status_data.rejection_reason
+            application.rejection_note = status_data.rejection_note
+            application.rejected_at = datetime.now()
+
+        else:
+            # si cambia a otro estado, limpia rechazo
+            application.rejection_reason = None
+            application.rejection_note = None
+            application.rejected_at = None
+
+        application.updated_at = datetime.now()
         session.add(application)
+
+        # 2) traer oferta asociada
+        offer = session.get(JobOffer, application.job_offer_id)
+
+        if offer:
+            offer.vacancies_filled = offer.vacancies_filled or 0
+            offer.vacancies_total = offer.vacancies_total or 1
+
+            # 3) hired -> rejected => restar vacante
+            if old_status == "hired" and new_status == "rejected":
+                offer.vacancies_filled = max(0, offer.vacancies_filled - 1)
+
+                # si estaba cerrada por cupos, reabrir
+                offer_status = str(offer.status or "").strip().lower()
+                if offer_status == "cerrado" and offer.vacancies_filled < offer.vacancies_total:
+                    offer.status = JobOfferStatus.PUBLICADO
+                    offer.is_active = 1
+                    offer.filled_at = None
+
+                offer.updated_at = datetime.now()
+                session.add(offer)
+
         session.commit()
         session.refresh(application)
         return application
@@ -257,7 +323,7 @@ class JobApplicationService:
         }
 
     # ----------------------------------------------------------------------
-    # GET ALL BY USER + OFFER DATA
+    # GET ALL BY USER + OFFER DATA  ✅ FIX PARA RESEÑAS BARISTA
     # ----------------------------------------------------------------------
     @staticmethod
     def get_applications_by_user_with_offer(
@@ -267,11 +333,13 @@ class JobApplicationService:
         limit: int = 100
     ) -> List[dict]:
         """Obtener todas las postulaciones de un usuario con información de las ofertas"""
+
         query = select(
             JobApplication,
             JobOffer.title,
             JobOffer.company,
-            JobOffer.location
+            JobOffer.location,
+            JobOffer.created_by   # ✅ NECESARIO PARA SABER employer_id
         ).join(
             JobOffer, JobApplication.job_offer_id == JobOffer.id
         ).where(
@@ -281,12 +349,21 @@ class JobApplicationService:
         results = session.exec(query).all()
 
         applications = []
-        for application, job_title, company, location in results:
+        for application, job_title, company, location, created_by in results:
             applications.append({
                 **application.model_dump(),
+
+                # datos de oferta (ya estaban)
                 "job_title": job_title,
                 "company": company,
-                "location": location
+                "location": location,
+
+                # ✅ NUEVO: esto usa el front para toUserId cuando reseña el barista
+                "employer_id": created_by,
+
+                "rejection_reason": application.rejection_reason,
+                "rejection_note": application.rejection_note,
+                "rejected_at": application.rejected_at,
             })
 
         return applications
@@ -354,3 +431,86 @@ class JobApplicationService:
 
         session.commit()
         return updated_ids
+
+    # ----------------------------------------------------------------------
+    # COMPLETE APPLICATION (uno marca, otro confirma)
+    # ----------------------------------------------------------------------
+    @staticmethod
+    def complete_application(
+        session: Session,
+        application_id: int,
+        actor_user_id: int,
+        actor_role: str  # "employer" | "worker"
+    ) -> Optional[JobApplication]:
+
+        application = session.get(JobApplication, application_id)
+        if not application:
+            return None
+
+        actor_role = str(actor_role or "").strip().lower()
+        if actor_role not in ("employer", "worker"):
+            raise HTTPException(status_code=400, detail="actor_role inválido")
+
+        current_status = str(
+            application.status.value if hasattr(application.status, "value")
+            else application.status or ""
+        ).strip().lower()
+
+        allowed_statuses = {
+            ApplicationStatus.HIRED.value,
+            ApplicationStatus.COMPLETED_BY_EMPLOYER.value,
+            ApplicationStatus.COMPLETED_BY_WORKER.value,
+            ApplicationStatus.COMPLETED_CONFIRMED.value
+        }
+        if current_status not in allowed_statuses:
+            raise HTTPException(status_code=400, detail="No se puede completar una postulación en este estado")
+
+        # Validaciones por rol
+        if actor_role == "worker":
+            if application.user_id != actor_user_id:
+                raise HTTPException(status_code=403, detail="Solo el postulante puede completar como worker")
+
+        elif actor_role == "employer":
+            offer = session.get(JobOffer, application.job_offer_id)
+            if not offer:
+                raise HTTPException(status_code=404, detail="Oferta no encontrada")
+
+            # Soporta distintos nombres de campo en JobOffer
+            owner_id = (
+                getattr(offer, "owner_id", None)
+                or getattr(offer, "user_id", None)
+                or getattr(offer, "created_by", None)
+            )
+            if owner_id is not None and owner_id != actor_user_id:
+                raise HTTPException(status_code=403, detail="Solo el ofertador puede completar como employer")
+
+        # ---------------------------------------------
+        # CAMBIOS DE ESTADO SEGÚN EL ROL
+        # ---------------------------------------------
+        if current_status == ApplicationStatus.HIRED.value:
+            application.status = (
+                ApplicationStatus.COMPLETED_BY_EMPLOYER
+                if actor_role == "employer"
+                else ApplicationStatus.COMPLETED_BY_WORKER
+            )
+
+        elif current_status == ApplicationStatus.COMPLETED_BY_EMPLOYER.value:
+            if actor_role == "worker":
+                application.status = ApplicationStatus.COMPLETED_CONFIRMED
+
+        elif current_status == ApplicationStatus.COMPLETED_BY_WORKER.value:
+            if actor_role == "employer":
+                application.status = ApplicationStatus.COMPLETED_CONFIRMED
+
+        # ---------------------------------------------
+        # IMPORTANTE:
+        # NO marcar worker_reviewed/employer_reviewed aquí.
+        # Esos flags se setean SOLO cuando se crea la reseña
+        # en ReviewService.create_review().
+        # ---------------------------------------------
+
+        application.updated_at = datetime.now()
+        session.add(application)
+        session.commit()
+        session.refresh(application)
+        return application

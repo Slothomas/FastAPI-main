@@ -1,9 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+import traceback
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
+from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from sqlmodel import Session
 from typing import List
 
 from app.services.db.sql_server_connection import get_session
 from app.services.db.job_application_service import JobApplicationService
+from app.models.job_application import JobApplication, ApplicationStatus
 from app.schemas.job_application import (
     JobApplicationCreate,
     JobApplicationUpdateStatus,
@@ -26,15 +30,6 @@ def create_job_application(
     user_id: int = Query(..., description="ID del usuario que postula"),
     session: Session = Depends(get_session)
 ):
-    """
-    Crear una nueva postulación a una oferta de trabajo.
-
-    - **job_offer_id**: ID de la oferta de trabajo
-    - **cover_letter**: Carta de presentación (opcional)
-
-    El usuario debe tener un CV completado para postular.
-    No se puede postular dos veces a la misma oferta.
-    """
     try:
         new_application = JobApplicationService.create_application(session, application, user_id)
         if not new_application:
@@ -46,6 +41,7 @@ def create_job_application(
     except HTTPException:
         raise
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al crear postulación: {str(e)}"
@@ -59,26 +55,13 @@ def get_my_applications(
     limit: int = Query(100, ge=1, le=100),
     session: Session = Depends(get_session)
 ):
-    """
-    Obtener todas las postulaciones de un usuario con información de las ofertas.
-
-    Devuelve cada postulación con:
-    - ID de la postulación
-    - Estado (pending, under_review, interview_scheduled, interviewed, offered, hired, rejected)
-    - Carta de presentación
-    - Título de la oferta de trabajo
-    - Empresa
-    - Ubicación
-    - Fecha de postulación
-
-    Ideal para que el usuario vea todas sus postulaciones y el estado de cada una.
-    """
     try:
         applications = JobApplicationService.get_applications_by_user_with_offer(
             session, user_id, skip, limit
         )
         return applications
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al obtener postulaciones: {str(e)}"
@@ -92,16 +75,13 @@ def get_applications_for_job_offer(
     limit: int = Query(100, ge=1, le=100),
     session: Session = Depends(get_session)
 ):
-    """
-    Obtener todas las postulaciones para una oferta de trabajo específica.
-    Útil para reclutadores que quieren ver quién ha aplicado.
-    """
     try:
         applications = JobApplicationService.get_applications_by_job_offer(
             session, job_offer_id, skip, limit
         )
         return applications
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al obtener postulaciones: {str(e)}"
@@ -113,9 +93,6 @@ def get_application(
     application_id: int,
     session: Session = Depends(get_session)
 ):
-    """
-    Obtener una postulación específica por ID.
-    """
     try:
         application = JobApplicationService.get_application_by_id(session, application_id)
         if not application:
@@ -127,6 +104,7 @@ def get_application(
     except HTTPException:
         raise
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al obtener postulación: {str(e)}"
@@ -138,10 +116,6 @@ def get_application_with_user(
     application_id: int,
     session: Session = Depends(get_session)
 ):
-    """
-    Obtener una postulación con información del usuario que aplicó.
-    Útil para reclutadores.
-    """
     try:
         application = JobApplicationService.get_application_with_user_info(session, application_id)
         if not application:
@@ -153,6 +127,7 @@ def get_application_with_user(
     except HTTPException:
         raise
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al obtener postulación: {str(e)}"
@@ -164,10 +139,6 @@ def get_application_with_offer(
     application_id: int,
     session: Session = Depends(get_session)
 ):
-    """
-    Obtener una postulación con información de la oferta de trabajo.
-    Útil para usuarios que quieren ver detalles de su postulación.
-    """
     try:
         application = JobApplicationService.get_application_with_offer_info(session, application_id)
         if not application:
@@ -179,92 +150,76 @@ def get_application_with_offer(
     except HTTPException:
         raise
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al obtener postulación: {str(e)}"
         )
 
 
-@router.put("/{application_id}/status", response_model=JobApplicationResponse)
+# ============================================================================
+# UPDATE STATUS (BLINDADO - SIN response_model PARA EVITAR 422)
+# ============================================================================
+@router.put("/{application_id}/status")
 def update_application_status(
     application_id: int,
-    status_data: JobApplicationUpdateStatus,
+    payload: dict = Body(...),
     session: Session = Depends(get_session)
 ):
     """
-    Actualizar el estado de una postulación.
-    Solo debe ser usado por reclutadores.
-
-    El campo **status** ahora es validado por Enum (ApplicationStatus) en el schema,
-    por lo que no se valida manualmente aquí.
+    Actualizar estado de una postulación y sincronizar vacantes
+    (HIRED -> REJECTED = libera cupo).
+    + Si rejected, guarda rejection_reason / rejection_note
     """
-    try:
-        updated_application = JobApplicationService.update_application_status(
-            session, application_id, status_data
-        )
-        if not updated_application:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Postulación no encontrada"
-            )
-        return updated_application
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al actualizar estado: {str(e)}"
-        )
 
+    print(f"\n🔵 [DEBUG] UPDATE STATUS controller para {application_id}, payload={payload}")
 
-@router.delete("/{application_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_application(
-    application_id: int,
-    user_id: int = Query(..., description="ID del usuario que elimina"),
-    session: Session = Depends(get_session)
-):
-    """
-    Eliminar una postulación.
-    Solo el usuario que creó la postulación puede eliminarla.
-    """
-    try:
-        success = JobApplicationService.delete_application(session, application_id, user_id)
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Postulación no encontrada o no tienes permiso para eliminarla"
-            )
-        return None
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al eliminar postulación: {str(e)}"
-        )
+    new_status_raw = payload.get("status")
+    recruiter_notes = payload.get("recruiter_notes")
+
+    # nuevos campos
+    rejection_reason = payload.get("rejection_reason")
+    rejection_note = payload.get("rejection_note")
+
+    if not new_status_raw:
+        raise HTTPException(status_code=400, detail="Falta 'status' en payload")
+
+    new_status_norm = str(new_status_raw).strip().lower()
+
+    status_data = JobApplicationUpdateStatus(
+        status=new_status_norm,
+        recruiter_notes=recruiter_notes,
+        rejection_reason=rejection_reason,
+        rejection_note=rejection_note
+    )
+
+    updated = JobApplicationService.update_application_status(
+        session, application_id, status_data
+    )
+
+    if not updated:
+        raise HTTPException(status_code=404, detail="Postulación no encontrada")
+
+    safe_status = str(updated.status.value) if hasattr(updated.status, "value") else str(updated.status)
+
+    return JSONResponse(content={
+        "id": updated.id,
+        "status": safe_status,
+        "message": "Estado actualizado correctamente (vacantes sincronizadas)",
+        "recruiter_notes": updated.recruiter_notes,
+        "rejection_reason": updated.rejection_reason,
+        "rejection_note": updated.rejection_note,
+        "rejected_at": updated.rejected_at.isoformat() if updated.rejected_at else None
+    })
 
 
 # ========== ENDPOINTS PARA ACTUALIZACIÓN EN LOTE ==========
 
-@router.put("/bulk/update-status", response_model=BulkUpdateResponse)
+@router.put("/bulk/update-status")
 def bulk_update_application_status(
     bulk_data: BulkStatusUpdate,
     session: Session = Depends(get_session)
 ):
-    """
-    Actualizar el estado de múltiples postulaciones a la vez.
-
-    **Caso de uso:** El reclutador revisó 20 CVs y quiere marcar todos como "under_review"
-
-    **Ejemplo:**
-    ```json
-    {
-      "application_ids": [1, 2, 3, 4, 5],
-      "status": "under_review",
-      "recruiter_notes": "Primeros 5 candidatos seleccionados para revisión"
-    }
-    ```
-    """
     try:
         updated_ids = JobApplicationService.bulk_update_status(
             session,
@@ -273,52 +228,27 @@ def bulk_update_application_status(
             bulk_data.recruiter_notes
         )
 
-        return BulkUpdateResponse(
-            updated_count=len(updated_ids),
-            application_ids=updated_ids,
-            status=bulk_data.status
-        )
+        # Respuesta JSON directa para evitar líos de Enums
+        return JSONResponse(content={
+            "updated_count": len(updated_ids),
+            "application_ids": updated_ids,
+            "status": str(bulk_data.status)
+        })
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al actualizar postulaciones en lote: {str(e)}"
         )
 
 
-@router.put("/bulk/job-offer/{job_offer_id}", response_model=BulkUpdateResponse)
+@router.put("/bulk/job-offer/{job_offer_id}")
 def bulk_update_by_job_offer(
     job_offer_id: int,
     bulk_data: JobOfferBulkUpdate,
     session: Session = Depends(get_session)
 ):
-    """
-    Actualizar todas las postulaciones de una oferta, excluyendo algunas.
-
-    **Caso de uso:** El reclutador encontró al candidato ideal (ID: 15) y quiere
-    rechazar automáticamente a todos los demás postulantes.
-
-    **Ejemplo 1 - Rechazar todos excepto los seleccionados:**
-    ```json
-    {
-      "job_offer_id": 10,
-      "exclude_ids": [15, 20],
-      "status": "rejected",
-      "recruiter_notes": "Posición cubierta, gracias por postular"
-    }
-    ```
-
-    **Ejemplo 2 - Poner todos en espera excepto los que ya están en entrevista:**
-    ```json
-    {
-      "job_offer_id": 10,
-      "exclude_ids": [15, 20, 25],
-      "status": "pending",
-      "recruiter_notes": "En lista de espera"
-    }
-    ```
-    """
     try:
-        # Validar que el job_offer_id coincida
         if bulk_data.job_offer_id != job_offer_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -333,18 +263,73 @@ def bulk_update_by_job_offer(
             bulk_data.recruiter_notes
         )
 
-        return BulkUpdateResponse(
-            updated_count=len(updated_ids),
-            application_ids=updated_ids,
-            status=bulk_data.status
-        )
+        return JSONResponse(content={
+            "updated_count": len(updated_ids),
+            "application_ids": updated_ids,
+            "status": str(bulk_data.status)
+        })
     except HTTPException:
         raise
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al actualizar postulaciones: {str(e)}"
         )
+
+
+# ============================================================================
+# COMPLETE JOB (uno marca, otro confirma)
+# ============================================================================
+@router.post("/{application_id}/complete")
+def mark_or_confirm_completed(
+    application_id: int,
+    actor_user_id: int = Query(..., description="ID del usuario que ejecuta la acción"),
+    actor_role: str = Query(..., description="Rol del actor: employer | worker"),
+    session: Session = Depends(get_session)
+):
+    """
+    Flujo post-trabajo:
+
+    1) Si status = hired:
+       - worker marca -> completed_by_worker
+       - employer marca -> completed_by_employer
+
+    2) Si status = completed_by_worker:
+       - employer confirma -> completed_confirmed
+
+    3) Si status = completed_by_employer:
+       - worker confirma -> completed_confirmed
+
+    4) Si status = completed_confirmed:
+       - idempotente, no cambia (pero no rompe)
+
+    NOTA:
+    Los flags worker_reviewed / employer_reviewed NO se tocan aquí.
+    Se actualizan solo al crear una review.
+    """
+
+    actor_role_norm = str(actor_role).strip().lower()
+    if actor_role_norm not in ("employer", "worker"):
+        raise HTTPException(status_code=400, detail="actor_role debe ser 'employer' o 'worker'")
+
+    updated = JobApplicationService.complete_application(
+        session=session,
+        application_id=application_id,
+        actor_user_id=actor_user_id,
+        actor_role=actor_role_norm
+    )
+
+    if not updated:
+        raise HTTPException(status_code=404, detail="Postulación no encontrada")
+
+    safe_status = str(updated.status.value) if hasattr(updated.status, "value") else str(updated.status)
+
+    return JSONResponse(content={
+        "id": updated.id,
+        "status": safe_status,
+        "message": "Estado de completado actualizado correctamente"
+    })
 
 
 @router.put("/{application_id}/refresh-matching", response_model=JobApplicationResponse)
@@ -352,9 +337,6 @@ def refresh_application_matching(
     application_id: int,
     session: Session = Depends(get_session)
 ):
-    """
-    Recalcula el matching_score de la postulación.
-    """
     try:
         app_updated = JobApplicationService.refresh_matching_score(session, application_id)
         if not app_updated:
@@ -367,6 +349,7 @@ def refresh_application_matching(
     except HTTPException:
         raise
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error refrescando matching: {str(e)}"

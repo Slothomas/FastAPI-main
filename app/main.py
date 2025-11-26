@@ -1,10 +1,17 @@
-# app/main.py
+import sys
+import traceback
 from datetime import datetime
-from fastapi import FastAPI
+import time
+import logging
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 
-# Importar routers
+# =================================================================
+# IMPORTACIÓN DE ROUTERS
+# =================================================================
 from app.controllers.hello_controller import router as hello_router
 from app.controllers.db_controller import router as db_router
 from app.controllers.user_controller import router as user_router
@@ -21,25 +28,67 @@ from app.controllers.favorites_controller import router as favorite_router
 from app.controllers.notification_controller import router as notification_router
 from app.controllers.event_log_controller import router as event_log_router
 from app.controllers.assignment_controller import router as assignment_router
-
-
-
-
-
+from app.controllers.business_controller import router as business_router
+from app.controllers.analytics_controller import router as analytics_router
 
 # Crear la aplicación FastAPI
 app = FastAPI(title="BaristaApp API")
 
+
+
+# =================================================================
+# MIDDLEWARE DE DEPURACION (Captura errores ocultos)
+# =================================================================
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s"
+)
+
+@app.middleware("http")
+async def log_all_requests(request: Request, call_next):
+    start = time.time()
+    response = await call_next(request)
+    ms = (time.time() - start) * 1000
+
+    logging.info(
+        f"{request.method} {request.url.path} -> {response.status_code} ({ms:.1f} ms)"
+    )
+    return response
+
+
+# Handler de excepciones estándar de FastAPI
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print("\n--- ERROR 500 EN BACKEND (HANDLER) ---")
+    print("URL:", request.url)
+    print("EXC:", repr(exc))
+    traceback.print_exc()
+    print("--- FIN ERROR ---\n")
+    return JSONResponse(
+        status_code=500,
+        content={"message": "Internal Server Error", "error": repr(exc)},
+    )
+
+
 # CORS (frontend SWA + local dev)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "*",   # dejarlo por si usas algún otro origen local
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Routers
+
+# =================================================================
+# INCLUSIÓN DE ROUTERS
+# =================================================================
 app.include_router(hello_router)
 app.include_router(db_router)
 app.include_router(user_router)
@@ -56,9 +105,15 @@ app.include_router(favorite_router)
 app.include_router(notification_router)
 app.include_router(event_log_router)
 app.include_router(assignment_router)
+app.include_router(business_router)
+app.include_router(analytics_router)
 
 
-# Endpoint de health y rutas disponibles
+
+# =================================================================
+# ENDPOINTS GENERALES
+# =================================================================
+
 @app.get("/")
 def health():
     return {

@@ -14,6 +14,10 @@ class AppUser(SQLModel, table=True):
     user: str = Field(sa_column=Column(NVARCHAR(50), nullable=False))
     email: str = Field(sa_column=Column(NVARCHAR(254), nullable=False, unique=True, index=True))
     password: str = Field(sa_column=Column(NVARCHAR(200), nullable=False))
+
+    # ✅ NUEVO
+    rut: Optional[str] = Field(default=None, sa_column=Column(NVARCHAR(12), nullable=True))
+
     user_type: Optional[str] = Field(default=None, sa_column=Column(VARCHAR(512), nullable=True))
 
     question1_id: Optional[int] = Field(default=None, sa_column=Column(SmallInteger, nullable=True))
