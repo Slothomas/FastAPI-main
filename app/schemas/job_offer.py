@@ -13,7 +13,7 @@ class JobOfferCreate(BaseModel):
     job_type: JobType
     description: str = Field(..., min_length=10)
 
-    salary_range: Optional[str] = Field(None, max_length=100)
+    salary_range: Optional[int] = None
     requirements: Optional[str] = None
     required_skills: Optional[str] = None
 
@@ -25,7 +25,6 @@ class JobOfferCreate(BaseModel):
     date_start: Optional[date] = None
     date_end: Optional[date] = None
 
-    # NUEVO: vacantes totales
     vacancies_total: Optional[int] = Field(1, ge=1, le=100)
 
 
@@ -36,7 +35,7 @@ class JobOfferUpdate(BaseModel):
     job_type: Optional[JobType] = None
     description: Optional[str] = Field(None, min_length=10)
 
-    salary_range: Optional[str] = Field(None, max_length=100)
+    salary_range: Optional[int] = Field(None, ge=0)
     requirements: Optional[str] = None
     required_skills: Optional[str] = None
 
@@ -50,7 +49,6 @@ class JobOfferUpdate(BaseModel):
 
     is_active: Optional[int] = Field(None, ge=0, le=1)
 
-    # IMPORTANTE: None por defecto, para NO pisar a 1 si no viene en el body
     vacancies_total: Optional[int] = Field(None, ge=1, le=100)
 
 
@@ -62,17 +60,17 @@ class JobOfferResponse(BaseModel):
     job_type: JobType
     description: str
 
-    salary_range: Optional[str]
-    requirements: Optional[str]
-    required_skills: Optional[str]
+    salary_range: Optional[int] = None
+    requirements: Optional[str] = None
+    required_skills: Optional[str] = None
 
     urgency: UrgencyType
     status: JobOfferStatus
 
-    region: Optional[str]
-    comuna: Optional[str]
-    date_start: Optional[date]
-    date_end: Optional[date]
+    region: Optional[str] = None
+    comuna: Optional[str] = None
+    date_start: Optional[date] = None
+    date_end: Optional[date] = None
 
     created_by: int
     selected_application_id: Optional[int] = None

@@ -40,7 +40,7 @@ class FavoriteOfferWithInfo(BaseModel):
     title: str
     company: str
     location: Optional[str]
-    salary_range: Optional[str]
+    salary_range: Optional[int] = None
     date_start: Optional[datetime]
     date_end: Optional[datetime]
     created_at: datetime

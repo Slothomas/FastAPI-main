@@ -170,14 +170,11 @@ class JobOfferService:
             q = q.where(func.lower(func.coalesce(JobOffer.required_skills, '')).like(like_skill))
 
         # Filtro de Salario (SQL Server Safe)
-        if min_salary is not None or max_salary is not None:
-            cleaned = func.replace(func.replace(JobOffer.salary_range, ".", ""), ",", "")
-            try_cast = func.try_cast(cleaned, float)
+        if min_salary is not None:
+            q = q.where(JobOffer.salary_range >= min_salary)
 
-            if min_salary is not None:
-                q = q.where(try_cast >= min_salary)
-            if max_salary is not None:
-                q = q.where(try_cast <= max_salary)
+        if max_salary is not None:
+            q = q.where(JobOffer.salary_range <= max_salary)
 
         if date_from:
             q = q.where(JobOffer.date_start >= date_from)

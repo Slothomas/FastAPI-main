@@ -6,33 +6,23 @@ from app.utils.security import verify_password
 
 def authenticate_user(user_or_email: str, password: str, session: Session) -> Optional[AppUser]:
     """
-    Autentica un usuario verificando sus credenciales.
-    Busca el usuario por nombre de usuario o email y verifica la contraseña.
-
-    Args:
-        user_or_email: Nombre de usuario o email
-        password: Contraseña en texto plano
-        session: Sesión de base de datos
-
-    Returns:
-        AppUser si las credenciales son correctas, None si no
+    Autentica un usuario verificando usuario/email + contraseña hasheada.
     """
-    # Buscar usuario por nombre de usuario o email
+
+    # Buscar usuario por username o email
     user = session.exec(
         select(AppUser).where(
             (AppUser.user == user_or_email) | (AppUser.email == user_or_email)
         )
     ).first()
 
-    # Si no existe el usuario, retornar None
     if not user:
         return None
 
-    # Verificar si el usuario está activo
     if user.is_active == 0:
         return None
 
-    # Verificar la contraseña
+    # Verificación HASH bcrypt
     if not verify_password(password, user.password):
         return None
 

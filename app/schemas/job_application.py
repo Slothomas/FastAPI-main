@@ -91,3 +91,5 @@ class JobApplicationWithOffer(JobApplicationResponse):
     job_title: str
     company: str
     location: str
+    job_offer_salary_range: Optional[int] = None
+    employer_id: Optional[int] = None

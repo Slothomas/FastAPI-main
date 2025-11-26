@@ -8,7 +8,6 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-
 # =================================================================
 # IMPORTACIÓN DE ROUTERS
 # =================================================================
@@ -30,11 +29,12 @@ from app.controllers.event_log_controller import router as event_log_router
 from app.controllers.assignment_controller import router as assignment_router
 from app.controllers.business_controller import router as business_router
 from app.controllers.analytics_controller import router as analytics_router
+from app.controllers.admin_metrics_controller import router as admin_metrics_router
+from app.controllers.gig_payment_controller import router as gig_payment_router
+from app.controllers.auth_controller import router as auth_router
 
 # Crear la aplicación FastAPI
 app = FastAPI(title="BaristaApp API")
-
-
 
 # =================================================================
 # MIDDLEWARE DE DEPURACION (Captura errores ocultos)
@@ -69,16 +69,15 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"message": "Internal Server Error", "error": repr(exc)},
     )
 
-
+        #"http://localhost:5173",
+        #"http://127.0.0.1:5173",
+        #"http://localhost:3000",
+        #"http://127.0.0.1:3000",
 # CORS (frontend SWA + local dev)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "*",   # dejarlo por si usas algún otro origen local
+        "*",  # Permitir todas las fuentes para desarrollo; en producción, especificar dominios
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -107,7 +106,9 @@ app.include_router(event_log_router)
 app.include_router(assignment_router)
 app.include_router(business_router)
 app.include_router(analytics_router)
-
+app.include_router(admin_metrics_router)
+app.include_router(gig_payment_router)
+app.include_router(auth_router)
 
 
 # =================================================================
@@ -132,7 +133,6 @@ def health():
         ],
     }
 
-# Endpoint principal de la aplicación
 @app.get("/miapp")
 def miapp():
     return {"message": "hola mundo"}

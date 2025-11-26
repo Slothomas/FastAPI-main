@@ -5,7 +5,7 @@ from typing import Optional, TYPE_CHECKING, List
 import enum
 
 from sqlmodel import SQLModel, Field, Column, Relationship
-from sqlalchemy import NVARCHAR, TEXT, DateTime, Enum as SQLEnum, Date
+from sqlalchemy import NVARCHAR, TEXT, DateTime, Enum as SQLEnum, Date, Integer
 
 # IMPORTACIONES REALES (Runtime)
 # Necesarias para que SQLAlchemy resuelva las relaciones sin errores
@@ -60,7 +60,18 @@ class JobOffer(SQLModel, table=True):
     job_type: JobType = Field(sa_column=Column(SQLEnum(JobType), nullable=False))
     description: str = Field(sa_column=Column(TEXT, nullable=False))
 
-    salary_range: Optional[str] = Field(default=None, sa_column=Column(NVARCHAR(100), nullable=True))
+    # Rango salarial referencial (si lo usas)
+    salary_range: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=True)   # cambiamos NVARCHAR -> INT real
+    )
+
+    # 💰 Monto bruto por turno sobre el que se calculan los fees (CLP)
+    shift_gross_amount: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=True)
+    )
+
     requirements: Optional[str] = Field(default=None, sa_column=Column(TEXT, nullable=True))
     required_skills: Optional[str] = Field(default=None, sa_column=Column(TEXT, nullable=True))
 
@@ -127,12 +138,12 @@ class JobOffer(SQLModel, table=True):
     # ============================================================
     # RELATIONSHIPS
     # ============================================================
-    
+
     # Relación N:1 con Business
-    #business: "Business" = Relationship(back_populates="job_offers")
+    # business: "Business" = Relationship(back_populates="job_offers")
     
     # Relación N:1 con BusinessLocation
-    #location_obj: "BusinessLocation" = Relationship(back_populates="job_offers")
+    # location_obj: "BusinessLocation" = Relationship(back_populates="job_offers")
 
     # Relación 1:N con JobApplication
-    #applications: List["JobApplication"] = Relationship(back_populates="job_offer")
+    # applications: List["JobApplication"] = Relationship(back_populates="job_offer")

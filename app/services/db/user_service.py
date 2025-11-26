@@ -44,7 +44,6 @@ def create_new_user(user_data: UserCreate, session: Session) -> AppUser:
         email=user_data.email,
         password=hash_password(user_data.password),
 
-        # ✅ NUEVO: guardar rut y user_type correctamente
         rut=user_data.rut,
         user_type=user_data.user_type,
 
