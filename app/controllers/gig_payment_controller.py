@@ -10,7 +10,7 @@ from app.schemas.gig_payment import GigPaymentResponse
 router = APIRouter(prefix="/gig-payments", tags=["GigPayments"])
 
 
-@router.get("/", response_model=list[GigPaymentResponse])
+@router.get("", response_model=list[GigPaymentResponse])
 def list_gig_payments(
     barista_id: int | None = Query(default=None),
     business_id: int | None = Query(default=None),
