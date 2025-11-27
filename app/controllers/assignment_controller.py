@@ -9,7 +9,10 @@ from app.schemas.assignment import (
 )
 from app.services.db.sql_server_connection import get_session
 
-# 👇 nuevo import: servicio que genera el GigPayment
+# Enum de estado de asignación
+from app.models.job_assignment import AssignmentStatus
+
+# servicio que genera el GigPayment
 from app.services.db.gig_payments import create_gig_payment_from_assignment
 
 router = APIRouter(prefix="/assignments", tags=["Assignments"])
@@ -37,18 +40,27 @@ def update_assignment(
     data: AssignmentUpdate,
     session: Session = Depends(get_session),
 ):
-    # Actualizamos el estado de la asignación
+    # 1) Actualizamos el estado de la asignación
     assignment = AssignmentService.update_assignment_status(
         session, assignment_id, data.status
     )
     if not assignment:
         raise HTTPException(404, "Asignación no encontrada")
 
+    # 2) Normalizamos el estado para soportar Enum o string
+    try:
+        # Si es Enum, .value suele ser "COMPLETED", "COMPLETED_CONFIRMED", etc.
+        status_value = assignment.status.value  # type: ignore[attr-defined]
+    except AttributeError:
+        # Si ya viene como string desde la BD
+        status_value = str(assignment.status)
+
+    status_value = status_value.strip().upper()
+
     # 🧠 Regla de negocio:
-    # Si la asignación queda en estado COMPLETED,
+    # Si la asignación queda en estado COMPLETED o COMPLETED_CONFIRMED,
     # generamos (si no existe) el GigPayment asociado.
-    status_str = str(assignment.status).upper()
-    if status_str == "COMPLETED":
+    if status_value in ("COMPLETED", "COMPLETED_CONFIRMED"):
         create_gig_payment_from_assignment(session, assignment)
 
     return assignment

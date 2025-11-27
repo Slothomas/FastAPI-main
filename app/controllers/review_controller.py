@@ -1,11 +1,15 @@
 # app/controllers/review_controller.py
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.services.db.sql_server_connection import get_session
 from app.services.db.review_service import ReviewService
 from app.schemas.review import ReviewCreate, ReviewResponse, ReviewListResponse
+
+# 🚀 Importamos lo necesario para generar el GigPayment
+from app.models.job_assignment import JobAssignment
+from app.services.db.gig_payments import create_gig_payment_from_assignment
 
 router = APIRouter(prefix="/reviews", tags=["Reviews"])
 
@@ -20,19 +24,12 @@ def create_review(
     session: Session = Depends(get_session)
 ):
     """
-    Crea una reseña.
-
-    Validaciones cubiertas:
-    - La postulación existe
-    - El trabajo está COMPLETED_CONFIRMED
-    - El usuario evaluador pertenece al proceso (worker o employer)
-    - No se permite 2 reseñas por rol
-    - Recalcula reputación del evaluado
-    - Marca en job_application worker_reviewed / employer_reviewed
+    Crea una reseña y, al final, intenta generar el GigPayment
+    para la asignación relacionada (worker + oferta).
     """
 
     # ---------------------------------------------------------
-    # DEBUG EXTENDIDO (para pillar el 422/400 real)
+    # DEBUG EXTENDIDO
     # ---------------------------------------------------------
     print("\n" + "=" * 90)
     print("🔍 DEBUG /reviews/")
@@ -51,7 +48,6 @@ def create_review(
             payload=data
         )
     except HTTPException:
-        # si el service ya levantó un HTTPException, lo respetamos
         raise
     except Exception as e:
         import traceback
@@ -69,6 +65,46 @@ def create_review(
         )
 
     print("✅ Reseña creada OK:", review)
+
+    # =========================================================================
+    # 🚀 1) Después de crear la reseña, generamos el GigPayment si corresponde
+    # =========================================================================
+    try:
+        # Paso 1: obtener la aplicación que está siendo evaluada
+        application = ReviewService.get_application_from_review(
+            session=session,
+            review=review
+        )
+
+        if not application:
+            print("⚠ No se encontró job_application, no se puede generar GigPayment.")
+            return review
+
+        # Paso 2: buscar el assignment (worker + job_offer)
+        assignment = session.exec(
+            select(JobAssignment).where(
+                JobAssignment.job_offer_id == application.job_offer_id,
+                JobAssignment.worker_id == application.user_id  # el barista
+            )
+        ).first()
+
+        if not assignment:
+            print(
+                f"⚠ No existe JobAssignment para job_offer={application.job_offer_id} "
+                f"y worker={application.user_id}. No se genera GigPayment."
+            )
+            return review
+
+        # Paso 3: generar o devolver el GigPayment
+        print(f"🔄 Intentando crear GigPayment para assignment_id={assignment.id}")
+        payment = create_gig_payment_from_assignment(session, assignment)
+        print(f"💰 GigPayment generado OK: id={payment.id}")
+
+    except Exception as e:
+        print(f"❌ ERROR generando GigPayment automáticamente: {e}")
+
+    # =========================================================================
+
     return review
 
 

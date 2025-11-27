@@ -1,130 +1,68 @@
+# app/models/gig_payment.py
+
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
 import enum
 
-from sqlmodel import SQLModel, Field, Column, Relationship
-from sqlalchemy import Integer, DateTime, Float, Enum as SQLEnum
+from sqlmodel import SQLModel, Field
 
-# IMPORTACIONES REALES
-from app.models.business import Business
-from app.models.job_offer import JobOffer
-
-if TYPE_CHECKING:
-    from app.models.assignment import Assignment
-    from app.models.app_user import AppUser
-
-
-# ============================================================
-# ENUMS
-# ============================================================
 
 class GigPaymentStatus(str, enum.Enum):
-    SIMULATED = "SIMULATED"   # calculado al completar turno (MVP)
-    CONFIRMED = "CONFIRMED"   # si en el futuro se valida el pago
-    PAID = "PAID"             # si en el futuro conectas pasarela real
+    SIMULATED = "SIMULATED"
+    PENDING = "PENDING"
+    PAID = "PAID"
 
-
-# ============================================================
-# MODELO
-# ============================================================
 
 class GigPayment(SQLModel, table=True):
     __tablename__ = "gig_payment"
 
     id: Optional[int] = Field(default=None, primary_key=True)
 
-    # --------------------------------------------------------
-    # RELACIONES CLAVE
-    # --------------------------------------------------------
+    # FK a job_assignment (tabla real: job_assignment)
     assignment_id: int = Field(
-        foreign_key="assignment.id",
-        nullable=False,
-        index=True
+        foreign_key="job_assignment.id",
+        index=True,
     )
 
+    # FK a job_offer
     job_offer_id: int = Field(
         foreign_key="job_offer.id",
-        nullable=False,
-        index=True
+        index=True,
     )
 
-    # Barista (trabajador que hizo el turno)
+    # FK a usuario barista
     barista_id: int = Field(
         foreign_key="app_user.id",
-        nullable=False,
-        index=True
+        index=True,
     )
 
-    # Cafetería / negocio que creó la oferta
+    # FK opcional a negocio (cafetería)
     business_id: Optional[int] = Field(
         default=None,
         foreign_key="business.id",
-        nullable=True,
-        index=True
+        index=True,
     )
 
-    # --------------------------------------------------------
-    # MONTOS Y PORCENTAJES
-    # (usamos Integer para CLP, igual que salary_range / shift_gross_amount)
-    # --------------------------------------------------------
+    # Monto bruto de la oferta (por turno / por gig)
+    gross_amount: int
 
-    # Monto bruto del turno (CLP)
-    gross_amount: int = Field(
-        sa_column=Column(Integer, nullable=False)
-    )
+    # Porcentajes de fee
+    fee_pct_cafe: float
+    fee_pct_barista: float
 
-    # Porcentajes usados (para dejar trazado si algún día cambian)
-    fee_pct_cafe: float = Field(
-        default=0.07,
-        sa_column=Column(Float, nullable=False)
-    )
+    # montos de fee ya calculados
+    fee_amount_cafe: int
+    fee_amount_barista: int
 
-    fee_pct_barista: float = Field(
-        default=0.03,
-        sa_column=Column(Float, nullable=False)
-    )
+    # neto para el barista
+    net_amount_barista: int
 
-    # Monto que gana la plataforma desde la cafetería (CLP)
-    fee_amount_cafe: int = Field(
-        sa_column=Column(Integer, nullable=False)
-    )
+    status: GigPaymentStatus = Field(default=GigPaymentStatus.SIMULATED)
 
-    # Monto que gana la plataforma desde el barista (CLP)
-    fee_amount_barista: int = Field(
-        sa_column=Column(Integer, nullable=False)
-    )
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    paid_at: Optional[datetime] = None
 
-    # Monto neto que recibe el barista (CLP)
-    net_amount_barista: int = Field(
-        sa_column=Column(Integer, nullable=False)
-    )
-
-    # --------------------------------------------------------
-    # ESTADO Y FECHAS
-    # --------------------------------------------------------
-
-    status: GigPaymentStatus = Field(
-        default=GigPaymentStatus.SIMULATED,
-        sa_column=Column(SQLEnum(GigPaymentStatus), nullable=False)
-    )
-
-    created_at: datetime = Field(
-        default_factory=datetime.utcnow,
-        sa_column=Column(DateTime, nullable=False)
-    )
-
-    paid_at: Optional[datetime] = Field(
-        default=None,
-        sa_column=Column(DateTime, nullable=True)
-    )
-
-    # --------------------------------------------------------
-    # RELATIONSHIPS (opcionales por ahora)
-    # --------------------------------------------------------
-
-    # assignment: "Assignment" = Relationship(back_populates="gig_payment")
-    # job_offer: "JobOffer" = Relationship(back_populates="gig_payments")
-    # barista: "AppUser" = Relationship(back_populates="gig_payments_as_barista")
-    # business: "Business" = Relationship(back_populates="gig_payments")
+    # ⚠️ Importante: sin relationships aquí
+    # Nada de relationship("JobAssignment") ni similares

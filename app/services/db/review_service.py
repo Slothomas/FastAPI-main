@@ -1,3 +1,5 @@
+# app/services/db/review_service.py
+
 from datetime import datetime
 from typing import List, Tuple
 from sqlmodel import Session, select, func
@@ -11,6 +13,26 @@ from app.models.job_offer import JobOffer
 
 
 class ReviewService:
+
+    # ============================================================
+    # NUEVO: obtener job_application desde una reseña
+    # ============================================================
+    @staticmethod
+    def get_application_from_review(session: Session, review: Review) -> JobApplication:
+        """
+        Dado un objeto Review, devuelve la JobApplication asociada.
+        Se usa para generar el GigPayment en el controller.
+        """
+        app = session.get(JobApplication, review.application_id)
+        if not app:
+            raise HTTPException(
+                500,
+                f"No se encontró JobApplication id={review.application_id} para esta reseña"
+            )
+        return app
+
+    # ============================================================
+
     @staticmethod
     def create_review(session: Session, reviewer_id: int, payload: ReviewCreate):
         # 1) Traer postulación
@@ -32,7 +54,7 @@ class ReviewService:
             raise HTTPException(404, "Oferta no encontrada")
 
         # 4) Identificar roles reales
-        employer_id = getattr(offer, "created_by", None)  # campo real
+        employer_id = getattr(offer, "created_by", None)
         worker_id = app.user_id
 
         if employer_id is None:
@@ -59,7 +81,7 @@ class ReviewService:
             job_offer_id=offer.id,
             reviewer_id=reviewer_id,
             reviewee_id=reviewee_id,
-            rating=float(payload.rating),  # asegurar float
+            rating=float(payload.rating),
             topic=payload.topic,
             comment=payload.comment,
             is_active=True,

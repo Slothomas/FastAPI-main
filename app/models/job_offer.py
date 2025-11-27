@@ -60,13 +60,11 @@ class JobOffer(SQLModel, table=True):
     job_type: JobType = Field(sa_column=Column(SQLEnum(JobType), nullable=False))
     description: str = Field(sa_column=Column(TEXT, nullable=False))
 
-    # Rango salarial referencial (si lo usas)
     salary_range: Optional[int] = Field(
         default=None,
         sa_column=Column(Integer, nullable=True)   # cambiamos NVARCHAR -> INT real
     )
 
-    # 💰 Monto bruto por turno sobre el que se calculan los fees (CLP)
     shift_gross_amount: Optional[int] = Field(
         default=None,
         sa_column=Column(Integer, nullable=True)
